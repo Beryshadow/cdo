@@ -31,6 +31,9 @@ fn main() {
     }
 
     match (command, cpp_file) {
+        ("help", _) => {
+            display_help();
+        }
         ("clean", _) => {
             // Remove the entire cdo directory
             if fs::metadata(&cdo_dir).is_ok() {
@@ -190,4 +193,17 @@ fn find_cpp_with_main(dir: &PathBuf) -> Option<String> {
         }
     }
     None
+}
+
+fn display_help() {
+    println!("Usage: cdo [command] [source_file]");
+    println!();
+    println!("Commands:");
+    println!("  build       Compiles the specified C++ source file or the one with a main function found in the current directory.");
+    println!("  run         Executes the compiled binary. If no binary exists, it will attempt to build it first.");
+    println!("  clean       Removes the compiled binary and the hash file.");
+    println!("  help        Displays this help message.");
+    println!();
+    println!("If no source file is provided, the program will look for a C++ file with a main function in the current directory.");
+    println!("The compiled binary will be placed in the 'cdo' directory in the current working directory.");
 }
