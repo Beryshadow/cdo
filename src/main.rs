@@ -1,3 +1,4 @@
+use core::panic;
 use std::collections::hash_map::DefaultHasher;
 use std::env;
 use std::fs;
@@ -22,7 +23,20 @@ fn main() {
     };
 
     // Create the cdo directory based on the current working directory
-    let cdo_dir = current_dir.join("cdo");
+    // let cdo_dir = current_dir.join("cdo");
+    // Determine the cdo directory based on input or current directory
+    let cdo_dir = if args.len() > 2 {
+        let input_dir = &args[2];
+        let path = Path::new(input_dir);
+        if path.is_dir() {
+            path.join("cdo")
+        } else {
+            eprintln!("Provided path is not a valid directory. Using current directory instead.");
+            current_dir.join("cdo")
+        }
+    } else {
+        current_dir.join("cdo")
+    };
     if (command == "run" || command == "build") && (cpp_file.is_some()) {
         // Create cdo dir if needed
         if !cdo_dir.exists() {
