@@ -43,7 +43,10 @@ fn main() {
         ("build", Some(cpp_file)) => {
             let executable_name =
                 cdo_dir.join(Path::new(&cpp_file).file_stem().unwrap().to_str().unwrap());
-            let hash_file = cdo_dir.join("source.hash");
+            let hash_file = cdo_dir.join(format!(
+                "{}.hash",
+                Path::new(&cpp_file).file_stem().unwrap().to_str().unwrap()
+            ));
             // Compile the C++ code using clang++
             let compile_status = Command::new("clang++")
                 .arg(&cpp_file)
@@ -71,7 +74,10 @@ fn main() {
         ("run", Some(cpp_file)) => {
             let executable_name =
                 cdo_dir.join(Path::new(&cpp_file).file_stem().unwrap().to_str().unwrap());
-            let hash_file = cdo_dir.join("source.hash");
+            let hash_file = cdo_dir.join(format!(
+                "{}.hash",
+                Path::new(&cpp_file).file_stem().unwrap().to_str().unwrap()
+            ));
             // Check if the source file exists
             if !fs::metadata(&cpp_file).is_ok() {
                 eprintln!("Error: Source file '{}' does not exist.", cpp_file);
@@ -141,7 +147,7 @@ fn main() {
                 .expect("Failed to run the program");
 
             if run_status.success() {
-                println!("\nC++ program ran successfully.");
+                // println!("\nC++ program ran successfully.");
             } else {
                 println!("\nC++ program failed to run.");
             }
