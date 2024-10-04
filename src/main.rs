@@ -1,4 +1,4 @@
-#![feature(exit_status_error)]
+#![feature(exit_status_error, try_trait_v2)]
 // use core::panic;
 use std::collections::hash_map::DefaultHasher;
 use std::env;
@@ -13,7 +13,7 @@ use std::process::Command;
 
 use local_error::LocalError;
 
-fn main() {
+fn main() -> std::result::Result<(), LocalError> {
     // Get the command-line arguments
     let args: Vec<String> = env::args().collect();
 
@@ -61,7 +61,7 @@ fn main() {
             remove_cdo_dir(&cdo_dir);
         }
         ("build", Some(cpp_file)) => {
-            build(&cdo_dir, cpp_file);
+            build(&cdo_dir, &cpp_file)?;
         }
 
         ("run", Some(cpp_file)) => {
@@ -71,83 +71,66 @@ fn main() {
             //     "{}.hash",
             //     Path::new(&cpp_file).file_stem().unwrap().to_str().unwrap()
             // ));
-            // // Check if the source file exists
-            // if !fs::metadata(&cpp_file).is_ok() {
             //     eprintln!("Error: Source file '{}' does not exist.", cpp_file);
             //     return;
             // }
 
-            // // Calculate the current hash of the source file
-            // let current_hash = match calculate_hash(&cpp_file) {
-            //     Ok(hash) => hash,
-            //     Err(e) => {
-            //         eprintln!("Failed to calculate hash: {}", e);
-            //         return;
-            //     }
-            // };
+            // Check if the source file exists
+            fs::metadata(&cpp_file)?;
+            //  Calculate the current hash of the source file
+            let current_hash = calculate_hash(&cpp_file)?;
+            // Gives the path to the hash file
+            let hash_file = cdo_dir.join(format!(
+                "{}.hash",
+                Path::new(&cpp_file).file_stem().unwrap().to_str().unwrap()
+            ));
+            // Get the hash from the file
+            let hash = calculate_hash(&cpp_file)?;
 
-            // let previous_hash = if fs::metadata(&hash_file).is_ok() {
-            //     match fs::read_to_string(&hash_file) {
-            //         Ok(hash_string) => hash_string.trim().parse::<u64>().unwrap_or(0),
-            //         Err(e) => {
-            //             eprintln!("Failed to read hash file: {}", e);
-            //             return;
-            //         }
-            //     }
-            // } else {
-            //     0
-            // };
-            build(&cdo_dir, cpp_file);
+            // Get the hash from file
+            let previous_hash: Option<u64> = if fs::metadata(&hash_file).is_ok() {
+                // We have a valid previous hash
+                Some(fs::read_to_string(&hash_file)?.trim().parse::<u64>()?)
+            } else {
+                None
+            };
+            fs::write(&hash_file, hash.to_string())?;
+
+            let executable_name = build(&cdo_dir, &cpp_file)?;
 
             // Check if the source file has changed
-            /* if current_hash != previous_hash {
-                            // If changed, compile again
-                            let compile_status = Command::new("clang++")
-                                .arg(&cpp_file)
-                                .arg("-o")
-                                .arg(&executable_name)
-                                .status()
-                                .expect("Failed to execute clang++");
+            if !(previous_hash.is_some() && current_hash == previous_hash.unwrap()) {
+                // If changed, compile again
+                let compile_status = Command::new("clang++")
+                    .arg(&cpp_file)
+                    .arg("-o")
+                    .arg(&executable_name)
+                    .status()
+                    .expect("Failed to execute clang++");
 
-                            if compile_status.success() {
-                                println!("Compiled {}.", cpp_file);
-                                let hash = match calculate_hash(&cpp_file) {
-                                    Ok(hash) => hash,
-                                    Err(e) => {
-                                        eprintln!("Failed to calculate hash: {}", e);
-                                        return;
-                                    }
-                                };
-                                if let Err(e) = fs::write(&hash_file, hash.to_string()) {
-                                    eprintln!("Failed to write hash file: {}", e);
-                                }
-                            } else {
-                                eprintln!("Failed to compile {}.", cpp_file);
-                                return;
-                            }
-                        }
+                compile_status.exit_ok()?;
+                println!("Compiled {}.", cpp_file);
+                let hash = calculate_hash(&cpp_file)?;
+                if let Err(e) = fs::write(&hash_file, hash.to_string()) {
+                    eprintln!("Failed to write hash file: {}", e);
+                }
+            }
 
-                        let executable_name =
-                            cdo_dir.join(Path::new(&cpp_file).file_stem().unwrap().to_str().unwrap()); // TODO REMOVE
-                                                                                                       // Run the compiled program
-                        if !fs::metadata(&executable_name).is_ok() {
-                            eprintln!(
-                                "Error: Executable '{}' not found. Please build first.",
-                                executable_name.display()
-                            );
-                            return;
-                        }
+            let executable_name =
+                cdo_dir.join(Path::new(&cpp_file).file_stem().unwrap().to_str().unwrap()); // TODO REMOVE
+                                                                                           // Run the compiled program
+            fs::metadata(&executable_name)?;
 
-                        let run_status = Command::new(&executable_name)
-                            .status()
-                            .expect("Failed to run the program");
+            let run_status = Command::new(&executable_name)
+                .status()
+                .expect("Failed to run the program");
 
-                        if run_status.success() {
-                            // println!("\nC++ program ran successfully.");
-                        } else {
-                            println!("\nC++ program failed to run.");
-                        }
-            TODO readd*/
+            if run_status.success() {
+                // println!("\nC++ program ran successfully.");
+            } else {
+                println!("\nC++ program failed to run.");
+            }
+            // TODO readd*/
         }
 
         ("run" | "build", None) => {
@@ -160,14 +143,12 @@ fn main() {
             );
         }
     }
+    Ok(())
 }
 
-fn build(cdo_dir: &PathBuf, cpp_file: String) -> std::result::Result<(), LocalError> {
+/// Build the source and return a path to the binary
+fn build(cdo_dir: &PathBuf, cpp_file: &String) -> std::result::Result<PathBuf, LocalError> {
     let executable_name = cdo_dir.join(Path::new(&cpp_file).file_stem().unwrap().to_str().unwrap());
-    let hash_file = cdo_dir.join(format!(
-        "{}.hash",
-        Path::new(&cpp_file).file_stem().unwrap().to_str().unwrap()
-    ));
     // Compile the C++ code using clang++
     let compile_status = Command::new("clang++")
         .arg(&cpp_file)
@@ -175,17 +156,11 @@ fn build(cdo_dir: &PathBuf, cpp_file: String) -> std::result::Result<(), LocalEr
         .arg(&executable_name)
         .status()
         .expect("Failed to execute clang++");
-
+    // Make sure the file compiled successfully
     compile_status.exit_ok()?;
     println!("Compiled {} successfully.", cpp_file);
     // Store the hash of the source file
-    let hash = calculate_hash(&cpp_file)?;
-    fs::write(&hash_file, hash.to_string())?;
-    Ok(())
-    // } else {
-    // return Err(&(format!("Failed to compile {}.", cpp_file)).into());
-    // return Err("Failed to compile {}.".into());
-    // }
+    Ok(executable_name)
 }
 
 fn remove_cdo_dir(cdo_dir: &PathBuf) {
