@@ -6,14 +6,14 @@ use std::fs;
 mod local_error;
 // use std::fs::ReadDir;
 use std::hash::{Hash, Hasher};
-use std::io::Result;
+// use std::io::Result;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use local_error::LocalError;
 
-fn main() -> std::result::Result<(), LocalError> {
+fn main() -> Result<(), LocalError> {
     // Get the command-line arguments
     let args: Vec<String> = env::args().collect();
 
@@ -51,6 +51,8 @@ fn main() -> std::result::Result<(), LocalError> {
             fs::create_dir_all(&cdo_dir).expect("Failed to create cdo directory");
         }
     }
+
+    // Set the cpp binary output location
     let executable_name = match &cpp_file {
         Some(cpp_file) => {
             Some(cdo_dir.join(Path::new(&cpp_file).file_stem().unwrap().to_str().unwrap()))
@@ -66,51 +68,20 @@ fn main() -> std::result::Result<(), LocalError> {
             // Remove the entire cdo directory
             remove_cdo_dir(&cdo_dir);
         }
+
         ("build", Some(cpp_file)) => {
-            let executable_name = executable_name.expect("Expected a valid file path");
-            build(&executable_name, &cpp_file)?;
+            build(&executable_name, cpp_file, &cdo_dir)?;
         }
 
         ("run", Some(cpp_file)) => {
-            let executable_name = executable_name.expect("Expected a valid file path");
-            // let executable_name =
-            //     cdo_dir.join(Path::new(&cpp_file).file_stem().unwrap().to_str().unwrap());
-            // let hash_file = cdo_dir.join(format!(
-            //     "{}.hash",
-            //     Path::new(&cpp_file).file_stem().unwrap().to_str().unwrap()
-            // ));
-            //     eprintln!("Error: Source file '{}' does not exist.", cpp_file);
-            //     return;
-            // }
-
-            // let executable_name = cdo_dir.join(Path::new(&cpp_file).file_stem().unwrap().to_str().unwrap());
-            // Check if the source file exists
-
-            fs::metadata(&cpp_file)?;
-            let source_has_changed = hash_has_changed(&cpp_file, cdo_dir)?;
-
-            // Check if the source file has changed
-            if source_has_changed {
-                // If changed, compile again
-                build(&executable_name, &cpp_file)?;
-            }
-
+            // Build the compiled program
+            build(&executable_name, cpp_file, &cdo_dir)?;
             // Run the compiled program
-            fs::metadata(&executable_name)?;
-
-            let run_status = Command::new(&executable_name)
-                .status()
-                .expect("Failed to run the program");
-
-            if run_status.success() {
-                // println!("\nC++ program ran successfully.");
-            } else {
-                println!("\nC++ program failed to run.");
-            }
+            execute(executable_name)?;
         }
 
         ("run" | "build", None) => {
-            eprintln!("You used the {} command without an available path, either provide one or go to the correct directory.", command);
+            eprintln!("You used the \"{}\" command without an available path, either provide one or go to the correct directory.", command);
         }
         _ => {
             eprintln!(
@@ -122,12 +93,45 @@ fn main() -> std::result::Result<(), LocalError> {
     Ok(())
 }
 
-fn hash_has_changed(cpp_file: &String, cdo_dir: PathBuf) -> Result<bool, LocalError> {
+fn execute(executable_name: Option<PathBuf>) -> Result<(), LocalError> {
+    let executable_name = executable_name
+        .as_ref()
+        .expect("Expected a valid file path");
+    fs::metadata(&executable_name)?;
+    let run_status = Command::new(&executable_name)
+        .status()
+        .expect("Failed to run the program");
+    Ok(if !run_status.success() {
+        println!("\nC++ program failed to run.");
+    })
+}
+
+fn build(
+    executable_name: &Option<PathBuf>,
+    cpp_file: String,
+    cdo_dir: &PathBuf,
+) -> Result<(), LocalError> {
+    let executable_name = executable_name
+        .as_ref()
+        .expect("Expected a valid file path");
+    fs::metadata(&cpp_file)?;
+    let source_has_changed = new_hash(&cpp_file, cdo_dir)?;
+    Ok(if source_has_changed {
+        // If changed, compile again
+        no_req_build(&executable_name, &cpp_file)?;
+    })
+}
+
+/// Update the hash if necessary and returns true if it was
+fn new_hash(cpp_file: &String, cdo_dir: &PathBuf) -> Result<bool, LocalError> {
+    // calculate the current hash
     let current_hash = calculate_hash(cpp_file)?;
+    // create the path to the hash
     let hash_file = cdo_dir.join(format!(
         "{}.hash",
         Path::new(&cpp_file).file_stem().unwrap().to_str().unwrap()
     ));
+    // obtain the old hash
     let previous_hash: Option<u64> = if fs::metadata(&hash_file).is_ok() {
         // We have a valid previous hash
         Some(
@@ -137,18 +141,21 @@ fn hash_has_changed(cpp_file: &String, cdo_dir: PathBuf) -> Result<bool, LocalEr
                 .unwrap(),
         )
     } else {
+        // We dont have a valid previous hash
         None
     };
-    let hash = calculate_hash(cpp_file)?;
     let source_has_changed = !(previous_hash.is_some() && current_hash == previous_hash.unwrap());
     if source_has_changed {
-        fs::write(&hash_file, hash.to_string())?
+        fs::write(&hash_file, current_hash.to_string())?
     };
     Ok(source_has_changed)
 }
 
 /// Build the source and return a path to the binary
-fn build(executable_name: &PathBuf, cpp_file: &String) -> std::result::Result<(), LocalError> {
+fn no_req_build(
+    executable_name: &PathBuf,
+    cpp_file: &String,
+) -> std::result::Result<(), LocalError> {
     // Compile the C++ code using clang++
     let compile_status = Command::new("clang++")
         .arg(&cpp_file)
@@ -159,8 +166,6 @@ fn build(executable_name: &PathBuf, cpp_file: &String) -> std::result::Result<()
     // Make sure the file compiled successfully
     compile_status.exit_ok()?;
     println!("Compiled {} successfully.", cpp_file);
-    // Store the hash of the source file
-    // Ok(executable_name)
     Ok(())
 }
 
