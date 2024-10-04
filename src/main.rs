@@ -51,6 +51,12 @@ fn main() -> std::result::Result<(), LocalError> {
             fs::create_dir_all(&cdo_dir).expect("Failed to create cdo directory");
         }
     }
+    let executable_name = match &cpp_file {
+        Some(cpp_file) => {
+            Some(cdo_dir.join(Path::new(&cpp_file).file_stem().unwrap().to_str().unwrap()))
+        }
+        None => None,
+    };
 
     match (command, cpp_file) {
         ("help", _) => {
@@ -61,10 +67,12 @@ fn main() -> std::result::Result<(), LocalError> {
             remove_cdo_dir(&cdo_dir);
         }
         ("build", Some(cpp_file)) => {
-            build(&cdo_dir, &cpp_file)?;
+            let executable_name = executable_name.expect("Expected a valid file path");
+            build(&executable_name, &cpp_file)?;
         }
 
         ("run", Some(cpp_file)) => {
+            let executable_name = executable_name.expect("Expected a valid file path");
             // let executable_name =
             //     cdo_dir.join(Path::new(&cpp_file).file_stem().unwrap().to_str().unwrap());
             // let hash_file = cdo_dir.join(format!(
@@ -75,50 +83,19 @@ fn main() -> std::result::Result<(), LocalError> {
             //     return;
             // }
 
+            // let executable_name = cdo_dir.join(Path::new(&cpp_file).file_stem().unwrap().to_str().unwrap());
             // Check if the source file exists
+
             fs::metadata(&cpp_file)?;
-            //  Calculate the current hash of the source file
-            let current_hash = calculate_hash(&cpp_file)?;
-            // Gives the path to the hash file
-            let hash_file = cdo_dir.join(format!(
-                "{}.hash",
-                Path::new(&cpp_file).file_stem().unwrap().to_str().unwrap()
-            ));
-            // Get the hash from the file
-            let hash = calculate_hash(&cpp_file)?;
-
-            // Get the hash from file
-            let previous_hash: Option<u64> = if fs::metadata(&hash_file).is_ok() {
-                // We have a valid previous hash
-                Some(fs::read_to_string(&hash_file)?.trim().parse::<u64>()?)
-            } else {
-                None
-            };
-            fs::write(&hash_file, hash.to_string())?;
-
-            let executable_name = build(&cdo_dir, &cpp_file)?;
+            let source_has_changed = hash_has_changed(&cpp_file, cdo_dir)?;
 
             // Check if the source file has changed
-            if !(previous_hash.is_some() && current_hash == previous_hash.unwrap()) {
+            if source_has_changed {
                 // If changed, compile again
-                let compile_status = Command::new("clang++")
-                    .arg(&cpp_file)
-                    .arg("-o")
-                    .arg(&executable_name)
-                    .status()
-                    .expect("Failed to execute clang++");
-
-                compile_status.exit_ok()?;
-                println!("Compiled {}.", cpp_file);
-                let hash = calculate_hash(&cpp_file)?;
-                if let Err(e) = fs::write(&hash_file, hash.to_string()) {
-                    eprintln!("Failed to write hash file: {}", e);
-                }
+                build(&executable_name, &cpp_file)?;
             }
 
-            let executable_name =
-                cdo_dir.join(Path::new(&cpp_file).file_stem().unwrap().to_str().unwrap()); // TODO REMOVE
-                                                                                           // Run the compiled program
+            // Run the compiled program
             fs::metadata(&executable_name)?;
 
             let run_status = Command::new(&executable_name)
@@ -130,7 +107,6 @@ fn main() -> std::result::Result<(), LocalError> {
             } else {
                 println!("\nC++ program failed to run.");
             }
-            // TODO readd*/
         }
 
         ("run" | "build", None) => {
@@ -146,9 +122,33 @@ fn main() -> std::result::Result<(), LocalError> {
     Ok(())
 }
 
+fn hash_has_changed(cpp_file: &String, cdo_dir: PathBuf) -> Result<bool, LocalError> {
+    let current_hash = calculate_hash(cpp_file)?;
+    let hash_file = cdo_dir.join(format!(
+        "{}.hash",
+        Path::new(&cpp_file).file_stem().unwrap().to_str().unwrap()
+    ));
+    let previous_hash: Option<u64> = if fs::metadata(&hash_file).is_ok() {
+        // We have a valid previous hash
+        Some(
+            fs::read_to_string(&hash_file)?
+                .trim()
+                .parse::<u64>()
+                .unwrap(),
+        )
+    } else {
+        None
+    };
+    let hash = calculate_hash(cpp_file)?;
+    let source_has_changed = !(previous_hash.is_some() && current_hash == previous_hash.unwrap());
+    if source_has_changed {
+        fs::write(&hash_file, hash.to_string())?
+    };
+    Ok(source_has_changed)
+}
+
 /// Build the source and return a path to the binary
-fn build(cdo_dir: &PathBuf, cpp_file: &String) -> std::result::Result<PathBuf, LocalError> {
-    let executable_name = cdo_dir.join(Path::new(&cpp_file).file_stem().unwrap().to_str().unwrap());
+fn build(executable_name: &PathBuf, cpp_file: &String) -> std::result::Result<(), LocalError> {
     // Compile the C++ code using clang++
     let compile_status = Command::new("clang++")
         .arg(&cpp_file)
@@ -160,7 +160,8 @@ fn build(cdo_dir: &PathBuf, cpp_file: &String) -> std::result::Result<PathBuf, L
     compile_status.exit_ok()?;
     println!("Compiled {} successfully.", cpp_file);
     // Store the hash of the source file
-    Ok(executable_name)
+    // Ok(executable_name)
+    Ok(())
 }
 
 fn remove_cdo_dir(cdo_dir: &PathBuf) {
