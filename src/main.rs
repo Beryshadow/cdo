@@ -18,19 +18,19 @@ fn main() {
     let command = if args.len() > 1 { &args[1] } else { "run" };
 
     // Create the cdo directory based on the current working directory
-    // let cdo_dir = current_dir.join("cdo");
+    // let cdo_dir = current_dir.join(".cdo");
     // Determine the cdo directory based on input or current directory
     let cdo_dir = if args.len() > 2 {
         let input_dir = &args[2];
         let path = Path::new(input_dir);
         if path.parent().is_some() {
-            path.parent().unwrap().join("cdo")
+            path.parent().unwrap().join(".cdo")
         } else {
             eprintln!("Provided path is not a valid file. Using current directory instead.");
-            current_dir.join("cdo")
+            current_dir.join(".cdo")
         }
     } else {
-        current_dir.join("cdo")
+        current_dir.join(".cdo")
     };
 
     let cpp_file = if args.len() > 2 {
