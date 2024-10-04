@@ -46,7 +46,9 @@ fn main() -> Result<(), LocalError> {
     };
 
     // Create cdo dir if needed (not gonna create one if we are cleaning)
-    if (command == "run" || command == "build") && (cpp_file.is_some()) {
+    if (command == "run" || command == "build")
+        && (cpp_file.as_ref().is_some_and(|x| fs::metadata(x).is_ok()))
+    {
         if !cdo_dir.exists() {
             fs::create_dir_all(&cdo_dir).expect("Failed to create cdo directory");
         }
