@@ -1,12 +1,17 @@
+#![feature(exit_status_error)]
 // use core::panic;
 use std::collections::hash_map::DefaultHasher;
 use std::env;
 use std::fs;
+mod local_error;
 // use std::fs::ReadDir;
 use std::hash::{Hash, Hasher};
+use std::io::Result;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::process::Command;
+
+use local_error::LocalError;
 
 fn main() {
     // Get the command-line arguments
@@ -33,14 +38,15 @@ fn main() {
         current_dir.join(".cdo")
     };
 
+    // Set the cpp file to either the specified path or the closest one in the current directory
     let cpp_file = if args.len() > 2 {
         Some(args[2].clone())
     } else {
         find_cpp_with_main(&cdo_dir.parent().expect("Expected a path").to_path_buf())
     };
 
+    // Create cdo dir if needed (not gonna create one if we are cleaning)
     if (command == "run" || command == "build") && (cpp_file.is_some()) {
-        // Create cdo dir if needed
         if !cdo_dir.exists() {
             fs::create_dir_all(&cdo_dir).expect("Failed to create cdo directory");
         }
@@ -52,124 +58,96 @@ fn main() {
         }
         ("clean", _) => {
             // Remove the entire cdo directory
-            if fs::metadata(&cdo_dir).is_ok() {
-                fs::remove_dir_all(&cdo_dir).expect("Failed to delete cdo directory");
-                println!("Deleted cdo directory: {}", cdo_dir.display());
-            } else {
-                println!("No cdo directory found to delete.");
-            }
+            remove_cdo_dir(&cdo_dir);
         }
         ("build", Some(cpp_file)) => {
-            let executable_name =
-                cdo_dir.join(Path::new(&cpp_file).file_stem().unwrap().to_str().unwrap());
-            let hash_file = cdo_dir.join(format!(
-                "{}.hash",
-                Path::new(&cpp_file).file_stem().unwrap().to_str().unwrap()
-            ));
-            // Compile the C++ code using clang++
-            let compile_status = Command::new("clang++")
-                .arg(&cpp_file)
-                .arg("-o")
-                .arg(&executable_name)
-                .status()
-                .expect("Failed to execute clang++");
-
-            if compile_status.success() {
-                println!("Compiled {} successfully.", cpp_file);
-                // Store the hash of the source file
-                match calculate_hash(&cpp_file) {
-                    Ok(hash) => {
-                        if let Err(e) = fs::write(&hash_file, hash.to_string()) {
-                            eprintln!("Failed to write hash file: {}", e);
-                        }
-                    }
-                    Err(e) => eprintln!("Failed to calculate hash: {}", e),
-                }
-            } else {
-                eprintln!("Failed to compile {}.", cpp_file);
-            }
+            build(&cdo_dir, cpp_file);
         }
 
         ("run", Some(cpp_file)) => {
-            let executable_name =
-                cdo_dir.join(Path::new(&cpp_file).file_stem().unwrap().to_str().unwrap());
-            let hash_file = cdo_dir.join(format!(
-                "{}.hash",
-                Path::new(&cpp_file).file_stem().unwrap().to_str().unwrap()
-            ));
-            // Check if the source file exists
-            if !fs::metadata(&cpp_file).is_ok() {
-                eprintln!("Error: Source file '{}' does not exist.", cpp_file);
-                return;
-            }
+            // let executable_name =
+            //     cdo_dir.join(Path::new(&cpp_file).file_stem().unwrap().to_str().unwrap());
+            // let hash_file = cdo_dir.join(format!(
+            //     "{}.hash",
+            //     Path::new(&cpp_file).file_stem().unwrap().to_str().unwrap()
+            // ));
+            // // Check if the source file exists
+            // if !fs::metadata(&cpp_file).is_ok() {
+            //     eprintln!("Error: Source file '{}' does not exist.", cpp_file);
+            //     return;
+            // }
 
-            // Calculate the current hash of the source file
-            let current_hash = match calculate_hash(&cpp_file) {
-                Ok(hash) => hash,
-                Err(e) => {
-                    eprintln!("Failed to calculate hash: {}", e);
-                    return;
-                }
-            };
+            // // Calculate the current hash of the source file
+            // let current_hash = match calculate_hash(&cpp_file) {
+            //     Ok(hash) => hash,
+            //     Err(e) => {
+            //         eprintln!("Failed to calculate hash: {}", e);
+            //         return;
+            //     }
+            // };
 
-            let previous_hash = if fs::metadata(&hash_file).is_ok() {
-                match fs::read_to_string(&hash_file) {
-                    Ok(hash_string) => hash_string.trim().parse::<u64>().unwrap_or(0),
-                    Err(e) => {
-                        eprintln!("Failed to read hash file: {}", e);
-                        return;
-                    }
-                }
-            } else {
-                0
-            };
+            // let previous_hash = if fs::metadata(&hash_file).is_ok() {
+            //     match fs::read_to_string(&hash_file) {
+            //         Ok(hash_string) => hash_string.trim().parse::<u64>().unwrap_or(0),
+            //         Err(e) => {
+            //             eprintln!("Failed to read hash file: {}", e);
+            //             return;
+            //         }
+            //     }
+            // } else {
+            //     0
+            // };
+            build(&cdo_dir, cpp_file);
 
             // Check if the source file has changed
-            if current_hash != previous_hash {
-                // If changed, compile again
-                let compile_status = Command::new("clang++")
-                    .arg(&cpp_file)
-                    .arg("-o")
-                    .arg(&executable_name)
-                    .status()
-                    .expect("Failed to execute clang++");
+            /* if current_hash != previous_hash {
+                            // If changed, compile again
+                            let compile_status = Command::new("clang++")
+                                .arg(&cpp_file)
+                                .arg("-o")
+                                .arg(&executable_name)
+                                .status()
+                                .expect("Failed to execute clang++");
 
-                if compile_status.success() {
-                    println!("Compiled {}.", cpp_file);
-                    let hash = match calculate_hash(&cpp_file) {
-                        Ok(hash) => hash,
-                        Err(e) => {
-                            eprintln!("Failed to calculate hash: {}", e);
+                            if compile_status.success() {
+                                println!("Compiled {}.", cpp_file);
+                                let hash = match calculate_hash(&cpp_file) {
+                                    Ok(hash) => hash,
+                                    Err(e) => {
+                                        eprintln!("Failed to calculate hash: {}", e);
+                                        return;
+                                    }
+                                };
+                                if let Err(e) = fs::write(&hash_file, hash.to_string()) {
+                                    eprintln!("Failed to write hash file: {}", e);
+                                }
+                            } else {
+                                eprintln!("Failed to compile {}.", cpp_file);
+                                return;
+                            }
+                        }
+
+                        let executable_name =
+                            cdo_dir.join(Path::new(&cpp_file).file_stem().unwrap().to_str().unwrap()); // TODO REMOVE
+                                                                                                       // Run the compiled program
+                        if !fs::metadata(&executable_name).is_ok() {
+                            eprintln!(
+                                "Error: Executable '{}' not found. Please build first.",
+                                executable_name.display()
+                            );
                             return;
                         }
-                    };
-                    if let Err(e) = fs::write(&hash_file, hash.to_string()) {
-                        eprintln!("Failed to write hash file: {}", e);
-                    }
-                } else {
-                    eprintln!("Failed to compile {}.", cpp_file);
-                    return;
-                }
-            }
 
-            // Run the compiled program
-            if !fs::metadata(&executable_name).is_ok() {
-                eprintln!(
-                    "Error: Executable '{}' not found. Please build first.",
-                    executable_name.display()
-                );
-                return;
-            }
+                        let run_status = Command::new(&executable_name)
+                            .status()
+                            .expect("Failed to run the program");
 
-            let run_status = Command::new(&executable_name)
-                .status()
-                .expect("Failed to run the program");
-
-            if run_status.success() {
-                // println!("\nC++ program ran successfully.");
-            } else {
-                println!("\nC++ program failed to run.");
-            }
+                        if run_status.success() {
+                            // println!("\nC++ program ran successfully.");
+                        } else {
+                            println!("\nC++ program failed to run.");
+                        }
+            TODO readd*/
         }
 
         ("run" | "build", None) => {
@@ -183,6 +161,42 @@ fn main() {
         }
     }
 }
+
+fn build(cdo_dir: &PathBuf, cpp_file: String) -> std::result::Result<(), LocalError> {
+    let executable_name = cdo_dir.join(Path::new(&cpp_file).file_stem().unwrap().to_str().unwrap());
+    let hash_file = cdo_dir.join(format!(
+        "{}.hash",
+        Path::new(&cpp_file).file_stem().unwrap().to_str().unwrap()
+    ));
+    // Compile the C++ code using clang++
+    let compile_status = Command::new("clang++")
+        .arg(&cpp_file)
+        .arg("-o")
+        .arg(&executable_name)
+        .status()
+        .expect("Failed to execute clang++");
+
+    compile_status.exit_ok()?;
+    println!("Compiled {} successfully.", cpp_file);
+    // Store the hash of the source file
+    let hash = calculate_hash(&cpp_file)?;
+    fs::write(&hash_file, hash.to_string())?;
+    Ok(())
+    // } else {
+    // return Err(&(format!("Failed to compile {}.", cpp_file)).into());
+    // return Err("Failed to compile {}.".into());
+    // }
+}
+
+fn remove_cdo_dir(cdo_dir: &PathBuf) {
+    if fs::metadata(cdo_dir).is_ok() {
+        fs::remove_dir_all(cdo_dir).expect("Failed to delete cdo directory");
+        println!("Deleted cdo directory: {}", cdo_dir.display());
+    } else {
+        println!("No cdo directory found to delete.");
+    }
+}
+
 fn calculate_hash(file_path: &str) -> io::Result<u64> {
     let mut hasher = DefaultHasher::new();
     let mut file = fs::File::open(file_path)?;
