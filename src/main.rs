@@ -124,7 +124,7 @@ fn build(
     })
 }
 
-/// Update the hash if necessary and returns true if it was
+/// Update the hash if necessary and returns true if it was changed
 fn new_hash(cpp_file: &String, cdo_dir: &PathBuf) -> Result<bool, LocalError> {
     // calculate the current hash
     let current_hash = calculate_hash(cpp_file)?;
