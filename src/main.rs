@@ -73,7 +73,7 @@ fn main() -> Result<(), LocalError> {
         }
         _ => {
             eprintln!(
-                "Unknown command: {}. Use 'build', 'run', or 'clean'.",
+                "Unknown command: {}. Use 'build', 'run', 'clean', or 'help'.",
                 command
             );
         }
