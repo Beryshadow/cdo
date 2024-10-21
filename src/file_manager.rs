@@ -1,4 +1,3 @@
-use core::panic;
 use std::{
     collections::HashSet,
     fmt::Display,
@@ -43,7 +42,7 @@ impl Display for MainPath {
 impl MainPath {
     /// Allows you to separate the MainPaths and Retain the only one with a value
     pub fn choose(&self, specific_file: Option<&String>) -> (MainPath, MainPath) {
-        let specific_file = specific_file.map(|s| PathBuf::from(s));
+        let specific_file = specific_file.map(PathBuf::from);
         // Default return values for the match
         let mut to_keep = MainPath::None;
         let mut others = MainPath::None;
@@ -112,7 +111,7 @@ pub fn find_cpp_with_main(dir: &PathBuf) -> MainPath {
     }
 }
 
-pub fn get_cdo_dir(args: &Vec<String>, current_dir: PathBuf) -> PathBuf {
+pub fn get_cdo_dir(args: &[String], current_dir: PathBuf) -> PathBuf {
     let cdo_dir = if args.len() > 2 {
         let input_dir = &*args[2];
         let path = Path::new(input_dir);
@@ -140,7 +139,7 @@ pub fn remove_cdo_dir(cdo_dir: &PathBuf) {
 }
 
 /// Update the hash if necessary and returns true if it was changed
-pub fn new_hash(cpp_file: &PathBuf, cdo_dir: &PathBuf) -> Result<bool, LocalError> {
+pub fn new_hash(cpp_file: &Path, cdo_dir: &Path) -> Result<bool, LocalError> {
     // calculate the current hash
     let current_hash = calculate_hash(cpp_file)?;
     // create the path to the hash
@@ -168,7 +167,7 @@ pub fn new_hash(cpp_file: &PathBuf, cdo_dir: &PathBuf) -> Result<bool, LocalErro
     Ok(source_has_changed)
 }
 
-fn calculate_hash(file_path: &PathBuf) -> io::Result<u64> {
+fn calculate_hash(file_path: &Path) -> io::Result<u64> {
     let mut hasher = DefaultHasher::new();
     let mut contents = Vec::new();
     // file.read_to_end(&mut contents)?;
@@ -206,10 +205,9 @@ fn find_cpp_dependencies(start_file: &Path) -> HashSet<PathBuf> {
                     // Only include files in the same directory or subdirectories
                     if full_path.is_file()
                         && is_within_directory(&full_path, file.parent().unwrap())
+                        && !dependencies.contains(&full_path)
                     {
-                        if !dependencies.contains(&full_path) {
-                            to_visit.push(full_path);
-                        }
+                        to_visit.push(full_path);
                     }
                 }
             }

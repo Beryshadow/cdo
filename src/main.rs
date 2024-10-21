@@ -86,30 +86,32 @@ fn execute(executable_name: Option<PathBuf>) -> Result<(), LocalError> {
     let executable_name = executable_name
         .as_ref()
         .expect("Expected a valid file path");
-    fs::metadata(&executable_name)?;
-    let run_status = Command::new(&executable_name)
+    fs::metadata(executable_name)?;
+    let run_status = Command::new(executable_name)
         .status()
         .expect("Failed to run the program");
-    Ok(if !run_status.success() {
+    if !run_status.success() {
         println!("\nC++ program failed to run.");
-    })
+    };
+    Ok(())
 }
 
 /// Build the executable and put it in the cdo folder
 fn build(
     executable_name: &Option<PathBuf>,
     cpp_file: &PathBuf,
-    cdo_dir: &PathBuf,
+    cdo_dir: &Path,
 ) -> Result<(), LocalError> {
     let executable_name = executable_name
         .as_ref()
         .expect("Expected a valid file path");
-    fs::metadata(&cpp_file)?;
-    let source_has_changed = new_hash(&cpp_file, cdo_dir)?;
-    Ok(if source_has_changed {
+    fs::metadata(cpp_file)?;
+    let source_has_changed = new_hash(cpp_file, cdo_dir)?;
+    if source_has_changed {
         // If changed, compile again
-        no_check_build(&executable_name, &cpp_file)?;
-    })
+        no_check_build(executable_name, cpp_file)?;
+    };
+    Ok(())
 }
 
 /// Build the source and return a path to the binary
@@ -119,9 +121,9 @@ fn no_check_build(
 ) -> std::result::Result<(), LocalError> {
     // Compile the C++ code using clang++
     let compile_status = Command::new("clang++")
-        .arg(&cpp_file)
+        .arg(cpp_file)
         .arg("-o")
-        .arg(&executable_name)
+        .arg(executable_name)
         .status()
         .expect("Failed to execute clang++");
     // Make sure the file compiled successfully
