@@ -115,7 +115,9 @@ pub fn get_cdo_dir(args: &[String], current_dir: PathBuf) -> PathBuf {
     let cdo_dir = if args.len() > 2 {
         let input_dir = &*args[2];
         let path = Path::new(input_dir);
-        if path.parent().map_or(false, |p| p.exists()) {
+        if path.is_dir() {
+            path.join(".cdo")
+        } else if path.parent().map_or(false, |p| p.exists()) {
             // If its a full path
             path.parent().unwrap().join(".cdo")
         } else {
