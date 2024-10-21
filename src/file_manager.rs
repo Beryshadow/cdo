@@ -1,11 +1,11 @@
-use core::{fmt, panic};
+use core::panic;
 use std::{
     collections::HashSet,
     fmt::Display,
     fs,
     hash::{DefaultHasher, Hash, Hasher},
     io::{self, Read},
-    path::{self, Path, PathBuf},
+    path::{Path, PathBuf},
 };
 use strsim::levenshtein;
 
@@ -51,9 +51,6 @@ impl MainPath {
         // Check if there's a specific file
         // if let Some(specific) = specific_file {
         match (self, specific_file) {
-            (MainPath::Single(ref path), Some(specific)) if path == &specific => {
-                to_keep = MainPath::Single(path.to_owned());
-            }
             (MainPath::Multiple(ref paths), Some(specific)) => {
                 // Find the candidate with the minimum Levenshtein distance
                 let path_to_keep = paths
@@ -70,9 +67,7 @@ impl MainPath {
                 );
                 to_keep = MainPath::Single(path_to_keep.to_owned());
             }
-            (MainPath::None, _) => {
-                // others = MainPath::None;
-            }
+            (MainPath::None, _) => {}
             (MainPath::Single(path), _) => {
                 to_keep = MainPath::Single(path.clone());
             }
@@ -81,29 +76,7 @@ impl MainPath {
                 to_keep = MainPath::Single(paths.pop().unwrap());
                 others = MainPath::Multiple(paths);
             }
-            _ => {
-                panic!("Unacounted self path");
-            }
         }
-
-        // if let MainPath::Multiple(mut paths) = self {
-        //     println!(
-        //         "Took {} other options were:\n{}",
-        //         Path::new(paths.last().unwrap())
-        //             .file_name()
-        //             .unwrap()
-        //             .to_str()
-        //             .unwrap(),
-        //         paths
-        //             .iter()
-        //             .take(paths.len() - 1)
-        //             .fold(String::new(), |acc, x| {
-        //                 let x = x.file_name().unwrap().to_str().unwrap();
-        //                 format!("{acc}{x}\n")
-        //             })
-        //     );
-        // }
-        // }
 
         (to_keep, others)
     }
