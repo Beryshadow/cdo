@@ -8,7 +8,32 @@ pub enum LocalError {
     IoErr(io::Error),
     ExitErr(process::ExitStatusError),
     Parse(ParseIntError),
+    Custom(StringWrapper),
 }
+
+impl LocalError {
+    pub fn new_custom(msg: String) -> crate::LocalError {
+        LocalError::Custom(StringWrapper::new(msg))
+    }
+}
+
+#[derive(Debug)]
+struct StringWrapper(String);
+
+impl StringWrapper {
+    fn new(string: String) -> Self {
+        StringWrapper(string)
+    }
+}
+
+impl fmt::Display for StringWrapper {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl std::error::Error for StringWrapper {}
+
 impl fmt::Display for LocalError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -17,6 +42,9 @@ impl fmt::Display for LocalError {
                 write!(f, "{e}")
             }
             LocalError::Parse(e) => {
+                write!(f, "{e}")
+            }
+            LocalError::Custom(e) => {
                 write!(f, "{e}")
             }
         }
@@ -29,6 +57,7 @@ impl error::Error for LocalError {
             LocalError::IoErr(e) => Some(e),
             LocalError::ExitErr(e) => Some(e),
             LocalError::Parse(e) => Some(e),
+            LocalError::Custom(e) => Some(e),
         }
     }
 }
@@ -51,5 +80,11 @@ impl From<io::Error> for LocalError {
 impl From<ParseIntError> for LocalError {
     fn from(err: ParseIntError) -> LocalError {
         LocalError::Parse(err)
+    }
+}
+
+impl From<String> for LocalError {
+    fn from(string: String) -> LocalError {
+        LocalError::Custom(StringWrapper(string))
     }
 }

@@ -4,29 +4,28 @@ use std::env;
 use std::fs;
 mod file_manager;
 mod local_error;
+mod text_edit;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use file_manager::*;
 use local_error::LocalError;
+use text_edit::*;
 
 fn main() -> Result<(), LocalError> {
     // Get the command-line arguments
     let args: Vec<String> = env::args().collect();
 
-    // Get current dir
-    let current_dir = env::current_dir().expect("Failed to get current directory");
-
     // Get the command inputed
     let command = if args.len() > 1 { &args[1] } else { "run" };
+
+    // Get current dir
+    let current_dir = env::current_dir().expect("Failed to get current directory");
 
     // Determine the cdo directory based on input or current directory
     let cdo_dir = get_cdo_dir(&args, current_dir);
 
-    if command == "clean" {
-        remove_cdo_dir(&cdo_dir);
-        return Ok(());
-    }
+    // if command == "clean" {}
 
     // Set the cpp file to either the specified path or the closest one in the current directory
     let cpp_file: MainPath =
@@ -34,13 +33,14 @@ fn main() -> Result<(), LocalError> {
 
     // Create cdo dir if needed (not gonna create one if we are cleaning or not even building)
     if cpp_file != MainPath::None && !cdo_dir.exists() {
+        eprintln!("Did print");
         fs::create_dir_all(&cdo_dir).expect("Failed to create cdo directory");
     }
 
     // Now gotta handle multiple file
     let (cpp_file, others) = cpp_file.choose(args.get(2));
     if cpp_file != MainPath::None {
-        println!("Took {} other options were: {}\n", cpp_file, others,);
+        println!("Took {} other options were: {}\n", cpp_file, others);
     }
 
     // Set the cpp binary output location
@@ -52,13 +52,22 @@ fn main() -> Result<(), LocalError> {
         _ => panic!(),
     };
 
+    // Helper
     match (command, cpp_file) {
         ("help", _) => {
             display_help();
         }
+        ("clean", _) => {
+            remove_cdo_dir(&cdo_dir);
+        }
 
         ("build", MainPath::Single(cpp_file)) => {
             build(&executable_name, &cpp_file, &cdo_dir)?;
+        }
+
+        ("splitHeader", MainPath::Single(cpp_file)) => {
+            // will split the headers into the H and Cpp files respectively
+            split_header(&cpp_file)?;
         }
 
         ("run", MainPath::Single(cpp_file)) => {

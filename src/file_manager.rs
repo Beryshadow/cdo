@@ -92,7 +92,8 @@ pub fn find_cpp_with_main(dir: &PathBuf) -> MainPath {
                 .filter_map(Result::ok) // Filter out errors
                 .filter(|entry| {
                     let path = entry.path();
-                    path.extension().map_or(false, |ext| ext == "cpp") // Check for .cpp extension
+                    path.extension()
+                        .map_or(false, |ext| ext == "cpp" || ext == "h") // Check for .cpp extension
                 })
                 .filter_map(|entry| {
                     let path = entry.path();
@@ -173,7 +174,7 @@ fn calculate_hash(file_path: &Path) -> io::Result<u64> {
     let mut hasher = DefaultHasher::new();
     let mut contents = Vec::new();
     // file.read_to_end(&mut contents)?;
-    let mut dependencies: Vec<_> = find_cpp_dependencies(file_path).into_iter().collect();
+    let mut dependencies: Vec<_> = find_related_files(file_path).into_iter().collect();
     dependencies.sort();
 
     println!("The used files are: ");
@@ -187,7 +188,7 @@ fn calculate_hash(file_path: &Path) -> io::Result<u64> {
     Ok(hasher.finish())
 }
 
-fn find_cpp_dependencies(start_file: &Path) -> HashSet<PathBuf> {
+pub fn find_related_files(start_file: &Path) -> HashSet<PathBuf> {
     let mut dependencies = HashSet::new();
     let mut to_visit = vec![start_file.to_path_buf()]; // Start with the main file
 
