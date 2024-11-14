@@ -1,6 +1,7 @@
 #![feature(exit_status_error, try_trait_v2)]
 use core::panic;
 use std::env;
+use std::fmt::{Debug, Display};
 use std::fs;
 mod file_manager;
 mod local_error;
@@ -74,7 +75,6 @@ fn main() -> Result<(), LocalError> {
             // Build the compiled program
             build(&executable_name, &cpp_file, &cdo_dir)?;
             // Run the compiled program
-            println!("here1");
             execute(executable_name)?;
         }
 
@@ -93,13 +93,10 @@ fn main() -> Result<(), LocalError> {
 
 /// Execute the binary, panic on no path
 fn execute(executable_name: Option<PathBuf>) -> Result<(), LocalError> {
-    println!("here2");
     let executable_name = executable_name
         .as_ref()
         .expect("Expected a valid file path");
-    println!("here3");
     fs::metadata(executable_name)?;
-    println!("here4");
     let run_status = Command::new(executable_name)
         .status()
         .expect("Failed to run the program");
@@ -120,7 +117,7 @@ fn build(
         .expect("Expected a valid file path");
     fs::metadata(cpp_file)?;
     let source_has_changed = new_hash(cpp_file, cdo_dir)?;
-    if source_has_changed {
+    if source_has_changed || !executable_name.exists() {
         // If changed, compile again
         no_check_build(executable_name, cpp_file)?;
     };
@@ -133,8 +130,33 @@ fn no_check_build(
     cpp_file: &PathBuf,
 ) -> std::result::Result<(), LocalError> {
     // Compile the C++ code using clang++
+    // Construct the command string for printing
+    // let command_string = format!(
+    //     "{} {:?} {} {} {:?}",
+    //     "clang++",
+    //     cpp_file,
+    //     find_related_files(&cpp_file)
+    //         .into_iter()
+    //         .filter(|file| Path::new(file).extension() == Some("cpp".as_ref()))
+    //         .filter(|file| file != cpp_file)
+    //         .map(|file| file.to_string_lossy().into_owned())
+    //         .collect::<Vec<_>>()
+    //         .join(" "),
+    //     "-o",
+    //     executable_name
+    // );
+
+    // Print the command to the console
+    // println!("Running command: {}", command_string);
+
     let compile_status = Command::new("clang++")
         .arg(cpp_file)
+        .args(
+            find_related_files(&cpp_file)
+                .into_iter()
+                .filter(|file| Path::new(file).extension() == Some("cpp".as_ref()))
+                .filter(|file| file != cpp_file),
+        )
         .arg("-o")
         .arg(executable_name)
         .status()
