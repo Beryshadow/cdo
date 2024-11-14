@@ -74,6 +74,7 @@ fn main() -> Result<(), LocalError> {
             // Build the compiled program
             build(&executable_name, &cpp_file, &cdo_dir)?;
             // Run the compiled program
+            println!("here1");
             execute(executable_name)?;
         }
 
@@ -92,10 +93,13 @@ fn main() -> Result<(), LocalError> {
 
 /// Execute the binary, panic on no path
 fn execute(executable_name: Option<PathBuf>) -> Result<(), LocalError> {
+    println!("here2");
     let executable_name = executable_name
         .as_ref()
         .expect("Expected a valid file path");
+    println!("here3");
     fs::metadata(executable_name)?;
+    println!("here4");
     let run_status = Command::new(executable_name)
         .status()
         .expect("Failed to run the program");
