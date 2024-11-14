@@ -1,11 +1,11 @@
 use crate::file_manager::*;
 use crate::local_error::LocalError;
-use std::collections::HashSet;
-use std::fs::{self, File};
-use std::io::{self, BufRead, Read, Write};
-use std::path::{Path, PathBuf};
+use std::collections::{HashMap, HashSet};
+use std::fs::File;
+use std::io::{Read, Write};
+use std::path::PathBuf;
 
-use crate::file_manager;
+// use crate::file_manager;
 
 // available:
 // fn find_related_files(start_file: &Path) -> HashSet<PathBuf>
@@ -20,69 +20,188 @@ use crate::file_manager;
 /// This function finds all the header files (all code completely written in header)
 /// and puts the functions content in each relevent .cpp file  
 // This function will now process all relevant header and cpp files within the project
-pub fn split_header(cpp_path: &PathBuf) -> Result<(), LocalError> {
+pub fn split_files(cpp_path: &PathBuf) -> Result<(), LocalError> {
     // Step 1: Find all related files in the project directory
-    let related_files = find_related_files(cpp_path);
+    let related_files: HashSet<PathBuf> = find_related_files(cpp_path);
 
-    // Step 2: Read all the header files to extract function declarations
-    let mut function_declarations = Vec::new();
+    // print the related files
+    println!("Related files vec: {:?}\n", related_files);
 
-    for header_file in &related_files {
-        if header_file
-            .extension()
-            .map(|ext| ext == "h" || ext == "hpp")
-            .unwrap_or(false)
-        {
-            // Read the header file and extract function declarations
-            let file = File::open(header_file).map_err(LocalError::from)?;
-            let reader = io::BufReader::new(file);
+    // Step 2: Make a list of all the .cpp and .h files that are associated
+    let mut associated: HashMap<PathBuf, PathBuf> = HashMap::new();
 
-            for line in reader.lines() {
-                let line = line.map_err(LocalError::from)?;
-
-                if let Some(declaration) = extract_function_declaration(&line) {
-                    function_declarations.push((header_file.clone(), declaration));
-                }
+    // We iterate through the related files and try to find .cpp and .h pairs
+    for file in &related_files {
+        let file_str = file.to_str().unwrap_or_default();
+        if file_str.ends_with(".cpp") {
+            let header_path = file.with_extension("h"); // Try to find a .h file
+            if header_path.exists() {
+                associated.insert(file.clone(), header_path);
+            }
+        } else if file_str.ends_with(".h") {
+            let cpp_path = file.with_extension("cpp"); // Try to find a .cpp file
+            if cpp_path.exists() {
+                associated.insert(cpp_path, file.clone());
             }
         }
     }
 
-    // Step 3: Process the .cpp files and add function definitions if needed
-    for cpp_file in &related_files {
-        if cpp_file
-            .extension()
-            .map(|ext| ext == "cpp")
-            .unwrap_or(false)
-        {
-            // Read the corresponding .cpp file to check if function definitions exist
-            let mut cpp_file_content = String::new();
-            let mut cpp_file = File::open(cpp_file).map_err(LocalError::from)?;
-            cpp_file
-                .read_to_string(&mut cpp_file_content)
-                .map_err(LocalError::from)?;
+    // print the associated vec
+    println!("Associated vec: {:?}", associated);
 
-            // Check if function definitions are missing and append them
-            let mut cpp_file = File::create(&cpp_path).map_err(LocalError::from)?;
-            for (header_file, declaration) in &function_declarations {
-                // Ensure the function is not already defined in the .cpp file
-                if cpp_file_content.contains(declaration) {
-                    continue;
-                }
-                writeln!(cpp_file, "{} {{}}", declaration).map_err(LocalError::from)?;
-            }
-        }
+    // Step 3: Process the .h and .cpp files to move function definitions
+    for (cpp, header) in associated {
+        let header_content = read_file(&header)?;
+        let cpp_content = read_file(&cpp)?;
+
+        let (updated_header, updated_cpp) = move_functions_to_cpp(&header_content, &cpp_content)?;
+
+        // show the result
+        println!("CPP: {updated_cpp}");
+        eprintln!("Headers: {updated_header}");
+
+        // Step 4: Write the updated contents back to the files
+        // write_file(&header, &updated_header)?;
+        // write_file(&cpp, &updated_cpp)?;
     }
 
     Ok(())
 }
-// Helper function to extract function declaration from a line of text
-fn extract_function_declaration(line: &str) -> Option<String> {
-    // This is a very simplistic function for demonstration purposes.
-    // It assumes functions are declared in a simple format (e.g., "int func();").
-    let trimmed = line.trim();
-    if trimmed.ends_with(';') && !trimmed.contains('{') {
-        Some(trimmed.to_string())
-    } else {
-        None
+// Helper function to read a file's content
+// Helper function to read a file's content
+fn read_file(path: &PathBuf) -> Result<String, LocalError> {
+    let mut file = File::open(path).map_err(|e| LocalError::IoErr(e))?;
+    let mut content = String::new();
+    file.read_to_string(&mut content)
+        .map_err(|e| LocalError::IoErr(e))?;
+    Ok(content)
+}
+
+// Helper function to write to a file
+fn write_file(path: &PathBuf, content: &str) -> Result<(), LocalError> {
+    let mut file = File::create(path).map_err(|e| LocalError::IoErr(e))?;
+    file.write_all(content.as_bytes())
+        .map_err(|e| LocalError::IoErr(e))?;
+    Ok(())
+}
+
+// Function to process header and cpp contents
+fn move_functions_to_cpp(
+    header_content: &str,
+    cpp_content: &str,
+) -> Result<(String, String), LocalError> {
+    let mut updated_header = header_content.to_string();
+    let mut updated_cpp = cpp_content.to_string();
+
+    // Split the header content by lines
+    let mut lines = header_content.lines().collect::<Vec<&str>>();
+
+    let mut function_defs: Vec<(String, String)> = Vec::new(); // Store functions to be moved
+
+    // Iterate through lines of header content to find classes and functions
+    let mut i = 0;
+    let mut inside_class = false;
+    let mut class_name = String::new();
+    let mut class_methods = Vec::new();
+
+    while i < lines.len() {
+        let line = lines[i].trim();
+
+        if let Some(class_start) = parse_class_start(line) {
+            // Entering class definition
+            inside_class = true;
+            class_name = class_start;
+            class_methods.clear(); // Reset class methods for this class
+        }
+
+        if inside_class {
+            if let Some(method_signature) = parse_function_signature(line) {
+                class_methods.push(method_signature.to_string());
+            }
+
+            // Check if we find the closing brace of the class
+            if line.contains('}') {
+                // Process the class methods
+                for method in class_methods.iter() {
+                    if let Some((signature, body)) = extract_function_body(method, &lines, &mut i) {
+                        // We have the body of the function
+                        function_defs.push((signature, body));
+                    }
+                }
+                // Now, leave the class
+                inside_class = false;
+                class_name.clear();
+            }
+        }
+
+        i += 1;
     }
+
+    // Process the found functions
+    for (signature, body) in function_defs {
+        updated_header = updated_header.replace(&signature, &format!("{};", signature)); // Keep only the signature
+        updated_cpp.push_str(&format!("\n{}\n", body)); // Add to cpp file
+    }
+
+    Ok((updated_header, updated_cpp))
+}
+
+// Try to parse a class start (class or struct definition)
+fn parse_class_start(line: &str) -> Option<String> {
+    let line = line.trim();
+    if line.starts_with("class ") || line.starts_with("struct ") {
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() > 1 {
+            return Some(parts[1].to_string()); // Return the class/struct name
+        }
+    }
+    None
+}
+
+// Try to parse a function signature (ignoring the body)
+fn parse_function_signature(line: &str) -> Option<String> {
+    let line = line.trim();
+    // A very basic check for function signature in the form: return_type function_name(params)
+    if line.ends_with("{") {
+        return Some(line.to_string());
+    }
+    None
+}
+
+// Extract function body from the header content using the signature
+fn extract_function_body(
+    signature: &str,
+    lines: &[&str],
+    current_idx: &mut usize,
+) -> Option<(String, String)> {
+    let mut body = String::new();
+    let mut brace_stack = Vec::new();
+    let mut i = *current_idx;
+
+    body.push_str(signature); // Start with the signature
+
+    brace_stack.push('{'); // We are inside a function, so push opening brace
+
+    while i < lines.len() {
+        let current_line = lines[i].trim();
+
+        if current_line.contains('{') {
+            brace_stack.push('{');
+        }
+
+        if current_line.contains('}') {
+            brace_stack.pop();
+            if brace_stack.is_empty() {
+                // We found the matching closing brace
+                break;
+            }
+        }
+
+        body.push_str(current_line); // Add the current line to function body
+        body.push('\n');
+        i += 1;
+    }
+
+    *current_idx = i; // Update the index to the current position
+    Some((signature.to_string(), body)) // Return both the signature and the body
 }

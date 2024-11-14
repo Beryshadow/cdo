@@ -65,9 +65,9 @@ fn main() -> Result<(), LocalError> {
             build(&executable_name, &cpp_file, &cdo_dir)?;
         }
 
-        ("splitHeader", MainPath::Single(cpp_file)) => {
+        ("splitFiles", MainPath::Single(cpp_file)) => {
             // will split the headers into the H and Cpp files respectively
-            split_header(&cpp_file)?;
+            split_files(&cpp_file)?;
         }
 
         ("run", MainPath::Single(cpp_file)) => {

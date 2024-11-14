@@ -201,6 +201,20 @@ pub fn find_related_files(start_file: &Path) -> HashSet<PathBuf> {
         if let Ok(contents) = fs::read_to_string(&file) {
             dependencies.insert(file.clone()); // Add the current file to dependencies
 
+            // FIND the related CPP or H file associated with this file
+            let file_str = file.to_str().unwrap_or_default();
+            if file_str.ends_with(".cpp") {
+                let header_path = file.with_extension("h"); // Try to find a .h file
+                if header_path.exists() {
+                    to_visit.push(header_path);
+                }
+            } else if file_str.ends_with(".h") {
+                let cpp_path = file.with_extension("cpp"); // Try to find a .cpp file
+                if cpp_path.exists() {
+                    to_visit.push(cpp_path);
+                }
+            }
+
             for line in contents.lines() {
                 if let Some(include_path) = extract_include_path(line) {
                     let full_path = file.parent().unwrap().join(&include_path);
