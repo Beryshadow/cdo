@@ -91,14 +91,14 @@ pub fn find_source_with_main(dir: &PathBuf) -> MainPath {
                 .filter(|entry| {
                     let path = entry.path();
                     path.extension()
-                        .map_or(false, |ext| ext == "cpp" || ext == "c" || ext == "h" || ext == "hpp") // Check for valid extensions
+                        .is_some_and(|ext| ext == "cpp" || ext == "c" || ext == "h" || ext == "hpp") // Check for valid extensions
                 })
                 .filter_map(|entry| {
                     let path = entry.path();
                     fs::read_to_string(&path)
                         .ok()
                         .filter(|contents| contents.contains("int main")) // Check for main function
-                        .map(|_| (path)) // Map to string path
+                        .map(|_| path ) // Map to string path
                 })
         })
         .collect(); // Collect results into a Vec
@@ -116,7 +116,7 @@ pub fn get_cdo_dir(args: &[String], current_dir: PathBuf) -> PathBuf {
         let path = Path::new(input_dir);
         if path.is_dir() {
             path.join(".cdo")
-        } else if path.parent().map_or(false, |p| p.exists()) {
+        } else if path.parent().is_some_and(|p| p.exists()) {
             // If its a full path
             path.parent().unwrap().join(".cdo")
         } else {

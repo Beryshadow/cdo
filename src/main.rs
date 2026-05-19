@@ -14,10 +14,22 @@ use text_edit::*;
 
 fn main() -> Result<(), LocalError> {
     // Get the command-line arguments
-    let args: Vec<String> = env::args().collect();
+    let mut args: Vec<String> = env::args().collect();
+
+    // Extract program arguments (anything after `--` or after `args[2]`)
+    let program_args = if let Some(idx) = args.iter().position(|x| x == "--") {
+        let mut pa = args.split_off(idx);
+        pa.remove(0); // Remove the "--" separator
+        pa
+    } else if args.len() > 3 {
+        // Assume anything after `cdo <command> <file>` belongs to the executed program
+        args.split_off(3)
+    } else {
+        vec![]
+    };
 
     // Get the command inputed
-    let command = if args.len() > 1 { &args[1] } else { "run" };
+    let command = if args.len() > 1 { args[1].clone() } else { "run".to_string() };
 
     // Get current dir
     let current_dir = env::current_dir().expect("Failed to get current directory");
@@ -51,7 +63,7 @@ fn main() -> Result<(), LocalError> {
     };
 
     // Helper
-    match (command, source_file) {
+    match (command.as_str(), source_file) {
         ("help", _) => {
             display_help();
         }
@@ -71,8 +83,8 @@ fn main() -> Result<(), LocalError> {
         ("run", MainPath::Single(source_file)) => {
             // Build the compiled program
             build(&executable_name, &source_file, &cdo_dir)?;
-            // Run the compiled program
-            execute(executable_name)?;
+            // Run the compiled program, passing the parsed program arguments
+            execute(executable_name, &program_args)?;
         }
 
         ("run" | "build", MainPath::None) => {
@@ -88,13 +100,14 @@ fn main() -> Result<(), LocalError> {
     Ok(())
 }
 
-/// Execute the binary, panic on no path
-fn execute(executable_name: Option<PathBuf>) -> Result<(), LocalError> {
+/// Execute the binary with program arguments, panic on no path
+fn execute(executable_name: Option<PathBuf>, program_args: &[String]) -> Result<(), LocalError> {
     let executable_name = executable_name
         .as_ref()
         .expect("Expected a valid file path");
     fs::metadata(executable_name)?;
     let run_status = Command::new(executable_name)
+        .args(program_args) // Forward program arguments here
         .status()
         .expect("Failed to run the program");
     if !run_status.success() {
@@ -128,13 +141,13 @@ fn no_check_build(
 ) -> std::result::Result<(), LocalError> {
     
     // Check if it's a C file, otherwise default to clang++
-    let is_c_file = source_file.extension().map_or(false, |ext| ext == "c");
+    let is_c_file = source_file.extension().is_some_and(|ext| ext == "c");
     let compiler = if is_c_file { "gcc" } else { "clang++" };
 
     let compile_status = Command::new(compiler)
         .arg(source_file)
         .args(
-            find_related_files(&source_file)
+            find_related_files(source_file)
                 .into_iter()
                 .filter(|file| {
                     let ext = Path::new(file).extension();
@@ -154,12 +167,14 @@ fn no_check_build(
 }
 
 fn display_help() {
-    println!("Usage: cdo [command] [source_file]");
+    println!("Usage: cdo [command] [source_file] [-- program_arguments]");
     println!();
     println!("Commands:");
     println!("  build       Compiles the specified C/C++ source file or the one with a main function found in the current directory.");
     println!("  run         Executes the compiled binary. If no binary exists, it will attempt to build it first.");
+    println!("              Tip: You can pass arguments to your program using '--'. Example: cdo run main.cpp -- arg1 arg2");
     println!("  clean       Removes the compiled binary and the hash file.");
+    println!("  splitFiles  Splits definitions from a header file into source files.");
     println!("  help        Displays this help message.");
     println!();
     println!("If no source file is provided, the program will look for a C or C++ file with a main function in the current directory.");

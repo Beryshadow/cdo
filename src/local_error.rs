@@ -11,20 +11,8 @@ pub enum LocalError {
     Custom(StringWrapper),
 }
 
-impl LocalError {
-    pub fn new_custom(msg: String) -> Self {
-        LocalError::Custom(StringWrapper::new(msg))
-    }
-}
-
 #[derive(Debug)]
-struct StringWrapper(String);
-
-impl StringWrapper {
-    fn new(string: String) -> Self {
-        StringWrapper(string)
-    }
-}
+pub struct StringWrapper(String);
 
 impl fmt::Display for StringWrapper {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

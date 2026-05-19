@@ -3,12 +3,12 @@ use crate::local_error::LocalError;
 use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{Read, Write};
-use std::path::PathBuf;
+use std::path::{PathBuf, Path};
 
 /// This function finds all the header files (all code completely written in header)
 /// and puts the functions content in each relevant source (.cpp or .c) file  
 // This function will now process all relevant header and source files within the project
-pub fn split_files(source_path: &PathBuf) -> Result<(), LocalError> {
+pub fn split_files(source_path: &Path) -> Result<(), LocalError> {
     // Step 1: Find all related files in the project directory
     let related_files: HashSet<PathBuf> = find_related_files(source_path);
 
@@ -63,18 +63,18 @@ pub fn split_files(source_path: &PathBuf) -> Result<(), LocalError> {
 
 // Helper function to read a file's content
 fn read_file(path: &PathBuf) -> Result<String, LocalError> {
-    let mut file = File::open(path).map_err(|e| LocalError::IoErr(e))?;
+    let mut file = File::open(path).map_err(LocalError::IoErr)?;
     let mut content = String::new();
     file.read_to_string(&mut content)
-        .map_err(|e| LocalError::IoErr(e))?;
+        .map_err(LocalError::IoErr)?;
     Ok(content)
 }
 
 // Helper function to write to a file
 fn write_file(path: &PathBuf, content: &str) -> Result<(), LocalError> {
-    let mut file = File::create(path).map_err(|e| LocalError::IoErr(e))?;
+    let mut file = File::create(path).map_err(LocalError::IoErr)?;
     file.write_all(content.as_bytes())
-        .map_err(|e| LocalError::IoErr(e))?;
+        .map_err(LocalError::IoErr)?;
     Ok(())
 }
 
@@ -87,7 +87,7 @@ fn move_functions_to_source(
     let mut updated_source = source_content.to_string();
 
     // Split the header content by lines
-    let mut lines = header_content.lines().collect::<Vec<&str>>();
+    let lines = header_content.lines().collect::<Vec<&str>>();
 
     let mut function_defs: Vec<(String, String)> = Vec::new(); // Store functions to be moved
 
