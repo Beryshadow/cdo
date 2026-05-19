@@ -53,9 +53,9 @@ pub fn split_files(source_path: &PathBuf) -> Result<(), LocalError> {
         println!("Source File Output: {updated_source}");
         eprintln!("Headers Output: {updated_header}");
 
-        // Step 4: Write the updated contents back to the files (uncomment to apply)
-        // write_file(&header, &updated_header)?;
-        // write_file(&source_file, &updated_source)?;
+        // Step 4: Write the updated contents back to the files
+        write_file(&header, &updated_header)?;
+        write_file(&source_file, &updated_source)?;
     }
 
     Ok(())
