@@ -12,7 +12,7 @@ pub enum LocalError {
 }
 
 impl LocalError {
-    pub fn new_custom(msg: String) -> crate::LocalError {
+    pub fn new_custom(msg: String) -> Self {
         LocalError::Custom(StringWrapper::new(msg))
     }
 }
