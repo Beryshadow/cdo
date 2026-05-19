@@ -5,35 +5,23 @@ use std::fs::File;
 use std::io::{Read, Write};
 use std::path::PathBuf;
 
-// use crate::file_manager;
-
-// available:
-// fn find_related_files(start_file: &Path) -> HashSet<PathBuf>
-//
-// pub enum LocalError {
-//     IoErr(io::Error),
-//     ExitErr(process::ExitStatusError),
-//     Parse(ParseIntError),
-// }
-//
-//
 /// This function finds all the header files (all code completely written in header)
-/// and puts the functions content in each relevent .cpp file  
-// This function will now process all relevant header and cpp files within the project
-pub fn split_files(cpp_path: &PathBuf) -> Result<(), LocalError> {
+/// and puts the functions content in each relevent source (.cpp or .c) file  
+// This function will now process all relevant header and source files within the project
+pub fn split_files(source_path: &PathBuf) -> Result<(), LocalError> {
     // Step 1: Find all related files in the project directory
-    let related_files: HashSet<PathBuf> = find_related_files(cpp_path);
+    let related_files: HashSet<PathBuf> = find_related_files(source_path);
 
     // print the related files
     println!("Related files vec: {:?}\n", related_files);
 
-    // Step 2: Make a list of all the .cpp and .h files that are associated
+    // Step 2: Make a list of all the source and .h files that are associated
     let mut associated: HashMap<PathBuf, PathBuf> = HashMap::new();
 
-    // We iterate through the related files and try to find .cpp and .h pairs
+    // We iterate through the related files and try to find source and header pairs
     for file in &related_files {
         let file_str = file.to_str().unwrap_or_default();
-        if file_str.ends_with(".cpp") {
+        if file_str.ends_with(".cpp") || file_str.ends_with(".c") {
             let header_path = file.with_extension("h"); // Try to find a .h file
             if header_path.exists() {
                 associated.insert(file.clone(), header_path);
@@ -42,6 +30,11 @@ pub fn split_files(cpp_path: &PathBuf) -> Result<(), LocalError> {
             let cpp_path = file.with_extension("cpp"); // Try to find a .cpp file
             if cpp_path.exists() {
                 associated.insert(cpp_path, file.clone());
+            } else {
+                let c_path = file.with_extension("c"); // Try to find a .c file
+                if c_path.exists() {
+                    associated.insert(c_path, file.clone());
+                }
             }
         }
     }
@@ -49,25 +42,25 @@ pub fn split_files(cpp_path: &PathBuf) -> Result<(), LocalError> {
     // print the associated vec
     println!("Associated vec: {:?}", associated);
 
-    // Step 3: Process the .h and .cpp files to move function definitions
-    for (cpp, header) in associated {
+    // Step 3: Process the .h and source files to move function definitions
+    for (source_file, header) in associated {
         let header_content = read_file(&header)?;
-        let cpp_content = read_file(&cpp)?;
+        let source_content = read_file(&source_file)?;
 
-        let (updated_header, updated_cpp) = move_functions_to_cpp(&header_content, &cpp_content)?;
+        let (updated_header, updated_source) = move_functions_to_source(&header_content, &source_content)?;
 
         // show the result
-        println!("CPP: {updated_cpp}");
-        eprintln!("Headers: {updated_header}");
+        println!("Source File Output: {updated_source}");
+        eprintln!("Headers Output: {updated_header}");
 
-        // Step 4: Write the updated contents back to the files
+        // Step 4: Write the updated contents back to the files (uncomment to apply)
         // write_file(&header, &updated_header)?;
-        // write_file(&cpp, &updated_cpp)?;
+        // write_file(&source_file, &updated_source)?;
     }
 
     Ok(())
 }
-// Helper function to read a file's content
+
 // Helper function to read a file's content
 fn read_file(path: &PathBuf) -> Result<String, LocalError> {
     let mut file = File::open(path).map_err(|e| LocalError::IoErr(e))?;
@@ -85,13 +78,13 @@ fn write_file(path: &PathBuf, content: &str) -> Result<(), LocalError> {
     Ok(())
 }
 
-// Function to process header and cpp contents
-fn move_functions_to_cpp(
+// Function to process header and source contents
+fn move_functions_to_source(
     header_content: &str,
-    cpp_content: &str,
+    source_content: &str,
 ) -> Result<(String, String), LocalError> {
     let mut updated_header = header_content.to_string();
-    let mut updated_cpp = cpp_content.to_string();
+    let mut updated_source = source_content.to_string();
 
     // Split the header content by lines
     let mut lines = header_content.lines().collect::<Vec<&str>>();
@@ -140,10 +133,10 @@ fn move_functions_to_cpp(
     // Process the found functions
     for (signature, body) in function_defs {
         updated_header = updated_header.replace(&signature, &format!("{};", signature)); // Keep only the signature
-        updated_cpp.push_str(&format!("\n{}\n", body)); // Add to cpp file
+        updated_source.push_str(&format!("\n{}\n", body)); // Add to source file
     }
 
-    Ok((updated_header, updated_cpp))
+    Ok((updated_header, updated_source))
 }
 
 // Try to parse a class start (class or struct definition)

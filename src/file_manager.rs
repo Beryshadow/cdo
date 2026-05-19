@@ -47,8 +47,6 @@ impl MainPath {
         let mut to_keep = MainPath::None;
         let mut others = MainPath::None;
 
-        // Check if there's a specific file
-        // if let Some(specific) = specific_file {
         match (self, specific_file) {
             (MainPath::Multiple(ref paths), Some(specific)) => {
                 // Find the candidate with the minimum Levenshtein distance
@@ -82,8 +80,8 @@ impl MainPath {
 }
 
 /// find the closest non recursive main (1st layer)
-pub fn find_cpp_with_main(dir: &PathBuf) -> MainPath {
-    // Create a vec to store all the cpp files with a main method
+pub fn find_source_with_main(dir: &PathBuf) -> MainPath {
+    // Create a vec to store all the source files with a main method
     let paths: Vec<PathBuf> = fs::read_dir(dir)
         .ok()
         .into_iter()
@@ -93,7 +91,7 @@ pub fn find_cpp_with_main(dir: &PathBuf) -> MainPath {
                 .filter(|entry| {
                     let path = entry.path();
                     path.extension()
-                        .map_or(false, |ext| ext == "cpp" || ext == "h") // Check for .cpp extension
+                        .map_or(false, |ext| ext == "cpp" || ext == "c" || ext == "h" || ext == "hpp") // Check for valid extensions
                 })
                 .filter_map(|entry| {
                     let path = entry.path();
@@ -142,13 +140,13 @@ pub fn remove_cdo_dir(cdo_dir: &PathBuf) {
 }
 
 /// Update the hash if necessary and returns true if it was changed
-pub fn new_hash(cpp_file: &Path, cdo_dir: &Path) -> Result<bool, LocalError> {
+pub fn new_hash(source_file: &Path, cdo_dir: &Path) -> Result<bool, LocalError> {
     // calculate the current hash
-    let current_hash = calculate_hash(cpp_file)?;
+    let current_hash = calculate_hash(source_file)?;
     // create the path to the hash
     let hash_file = cdo_dir.join(format!(
         "{}.hash",
-        cpp_file.file_stem().unwrap().to_str().unwrap()
+        source_file.file_stem().unwrap().to_str().unwrap()
     ));
     // obtain the old hash
     let previous_hash: Option<u64> = if fs::metadata(&hash_file).is_ok() {
@@ -173,7 +171,6 @@ pub fn new_hash(cpp_file: &Path, cdo_dir: &Path) -> Result<bool, LocalError> {
 fn calculate_hash(file_path: &Path) -> io::Result<u64> {
     let mut hasher = DefaultHasher::new();
     let mut contents = Vec::new();
-    // file.read_to_end(&mut contents)?;
     let mut dependencies: Vec<_> = find_related_files(file_path).into_iter().collect();
     dependencies.sort();
 
@@ -201,17 +198,25 @@ pub fn find_related_files(start_file: &Path) -> HashSet<PathBuf> {
         if let Ok(contents) = fs::read_to_string(&file) {
             dependencies.insert(file.clone()); // Add the current file to dependencies
 
-            // FIND the related CPP or H file associated with this file
+            // FIND the related CPP, C or H file associated with this file
             let file_str = file.to_str().unwrap_or_default();
-            if file_str.ends_with(".cpp") {
+            if file_str.ends_with(".cpp") || file_str.ends_with(".c") {
                 let header_path = file.with_extension("h"); // Try to find a .h file
                 if header_path.exists() {
                     to_visit.push(header_path);
                 }
-            } else if file_str.ends_with(".h") {
+                let hpp_path = file.with_extension("hpp"); // Try to find a .hpp file
+                if hpp_path.exists() {
+                    to_visit.push(hpp_path);
+                }
+            } else if file_str.ends_with(".h") || file_str.ends_with(".hpp") {
                 let cpp_path = file.with_extension("cpp"); // Try to find a .cpp file
                 if cpp_path.exists() {
                     to_visit.push(cpp_path);
+                }
+                let c_path = file.with_extension("c"); // Try to find a .c file
+                if c_path.exists() {
+                    to_visit.push(c_path);
                 }
             }
 
