@@ -1,7 +1,6 @@
 #![feature(exit_status_error, try_trait_v2)]
 use core::panic;
 use std::env;
-use std::fmt::{Debug, Display};
 use std::fs;
 mod file_manager;
 mod local_error;
