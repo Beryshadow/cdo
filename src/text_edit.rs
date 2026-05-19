@@ -6,7 +6,7 @@ use std::io::{Read, Write};
 use std::path::PathBuf;
 
 /// This function finds all the header files (all code completely written in header)
-/// and puts the functions content in each relevent source (.cpp or .c) file  
+/// and puts the functions content in each relevant source (.cpp or .c) file  
 // This function will now process all relevant header and source files within the project
 pub fn split_files(source_path: &PathBuf) -> Result<(), LocalError> {
     // Step 1: Find all related files in the project directory
